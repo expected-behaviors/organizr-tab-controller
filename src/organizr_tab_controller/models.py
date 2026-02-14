@@ -212,6 +212,12 @@ class K8sResourceRef(BaseModel):
 
     # Ingress-specific helpers (populated only for Ingress resources)
     ingress_hosts: list[str] = Field(default_factory=list)
+    ingress_backend_service_name: str | None = Field(
+        default=None, description="Service name from the first Ingress backend rule"
+    )
+    ingress_backend_service_port: int | None = Field(
+        default=None, description="Port number from the first Ingress backend rule"
+    )
 
     # Service-specific helpers
     service_cluster_ip: str | None = None

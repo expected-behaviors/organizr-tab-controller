@@ -73,10 +73,14 @@ def _int_ann(annotations: dict[str, str], key: str, default: int | None) -> int 
         return default
 
 
-def build_desired_tab(ref: K8sResourceRef, default_scheme: str = "https") -> Tab:
+def build_desired_tab(ref: K8sResourceRef) -> Tab:
     """Construct a desired :class:`Tab` from a Kubernetes resource reference.
 
     Uses explicit annotations where set, then falls back to passive derivation.
+
+    Default scheme conventions:
+    - External URL (``url``): **https** (Ingress host or external-dns hostname)
+    - Local URL (``url_local``): **http** (Service name + namespace internal DNS)
     """
     ann = ref.annotations
 
@@ -86,36 +90,48 @@ def build_desired_tab(ref: K8sResourceRef, default_scheme: str = "https") -> Tab
         name = ref.labels.get("app.kubernetes.io/name", "") or ref.name
         name = name.replace("-", " ").replace("_", " ").title()
 
-    # ---- URL (passive: from Ingress hosts or external-dns annotation) ---------
+    # ---- URL — external address (https by default) ----------------------------
+    # Priority: explicit annotation > Ingress host > external-dns hostname > fallback
     url = ann.get(_ann("url"), "").strip()
     if not url:
         if ref.ingress_hosts:
-            url = f"{default_scheme}://{ref.ingress_hosts[0]}"
+            # Ingress: use the exact host from the Ingress spec
+            url = f"https://{ref.ingress_hosts[0]}"
         else:
-            # Try external-dns hostname annotation
+            # Non-Ingress: try external-dns hostname annotation
             ext_hostname = ann.get("external-dns.alpha.kubernetes.io/hostname", "")
             if ext_hostname:
-                url = f"{default_scheme}://{ext_hostname}"
-            elif ref.ingress_hosts:
-                url = f"{default_scheme}://{ref.ingress_hosts[0]}"
+                url = f"https://{ext_hostname}"
             else:
-                # Fallback: construct from resource name + namespace
-                url = f"{default_scheme}://{ref.name}.{ref.namespace}"
+                # Last resort: construct from resource name + namespace
+                url = f"https://{ref.name}.{ref.namespace}"
 
-    # ---- URL local (passive: cluster-internal DNS) ----------------------------
+    # ---- URL local — internal cluster address (http by default) ---------------
+    # Priority: explicit annotation > Ingress backend service > Service itself
     url_local = ann.get(_ann("url-local"), "").strip() or None
-    if url_local is None and ref.service_cluster_ip:
-        port = ref.service_ports[0] if ref.service_ports else 80
-        url_local = f"http://{ref.name}.{ref.namespace}.svc.cluster.local:{port}"
+    if url_local is None:
+        if ref.kind.lower() == "ingress" and ref.ingress_backend_service_name:
+            # Ingress: use the backend service name from the Ingress spec
+            svc_name = ref.ingress_backend_service_name
+            port = ref.ingress_backend_service_port or 80
+            url_local = f"http://{svc_name}.{ref.namespace}.svc.cluster.local:{port}"
+        elif ref.kind.lower() == "service":
+            # Service: use the service's own name and namespace
+            port = ref.service_ports[0] if ref.service_ports else 80
+            url_local = f"http://{ref.name}.{ref.namespace}.svc.cluster.local:{port}"
 
-    # ---- Ping URL (passive: from service IP and port) -------------------------
+    # ---- Ping URL (host:port, no scheme) --------------------------------------
+    # Priority: explicit annotation > backend service > Service itself > Ingress host
     ping_url = ann.get(_ann("ping-url"), "").strip() or None
     if ping_url is None:
-        if ref.service_cluster_ip and ref.service_ports:
+        if ref.kind.lower() == "ingress" and ref.ingress_backend_service_name:
+            # Ingress: ping the backend service inside the cluster
+            svc_name = ref.ingress_backend_service_name
+            port = ref.ingress_backend_service_port or 80
+            ping_url = f"{svc_name}.{ref.namespace}:{port}"
+        elif ref.kind.lower() == "service" and ref.service_ports:
+            # Service: ping the service itself
             ping_url = f"{ref.name}.{ref.namespace}:{ref.service_ports[0]}"
-        elif ref.kind.lower() == "ingress" and ref.ingress_hosts:
-            # For ingresses, use the hostname on port 443/80
-            ping_url = f"{ref.ingress_hosts[0]}:443"
 
     # ---- Image (passive: icon matching by app name) ---------------------------
     image_ann = ann.get(_ann("image"), "").strip()
@@ -194,7 +210,6 @@ def reconcile(
     desired_refs: list[K8sResourceRef],
     actual_tabs: list[Tab],
     sync_policy: SyncPolicy,
-    default_scheme: str = "https",
 ) -> ReconcileActions:
     """Compute the set of API actions needed to reconcile desired state with actual.
 
@@ -206,8 +221,6 @@ def reconcile(
         Current tabs fetched from the Organizr API.
     sync_policy:
         ``upsert`` or ``sync``.
-    default_scheme:
-        URL scheme to use when deriving URLs from hostnames.
 
     Returns
     -------
@@ -220,7 +233,7 @@ def reconcile(
     desired_tabs: list[Tab] = []
     for ref in desired_refs:
         try:
-            desired_tabs.append(build_desired_tab(ref, default_scheme))
+            desired_tabs.append(build_desired_tab(ref))
         except Exception:
             logger.exception("build_tab_error", resource=ref.tracking_key)
 

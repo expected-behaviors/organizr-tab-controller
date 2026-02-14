@@ -19,6 +19,8 @@ def _make_ref(
     annotations: dict[str, str] | None = None,
     labels: dict[str, str] | None = None,
     ingress_hosts: list[str] | None = None,
+    ingress_backend_service_name: str | None = None,
+    ingress_backend_service_port: int | None = None,
     service_cluster_ip: str | None = None,
     service_ports: list[int] | None = None,
 ) -> K8sResourceRef:
@@ -34,6 +36,8 @@ def _make_ref(
         annotations=base_annotations,
         labels=labels or {},
         ingress_hosts=ingress_hosts or [],
+        ingress_backend_service_name=ingress_backend_service_name,
+        ingress_backend_service_port=ingress_backend_service_port,
         service_cluster_ip=service_cluster_ip,
         service_ports=service_ports or [],
     )
@@ -41,16 +45,43 @@ def _make_ref(
 
 class TestBuildDesiredTab:
     def test_minimal_ingress(self) -> None:
+        """Ingress with host -> external URL is https, local URL from backend service."""
+        ref = _make_ref(
+            name="radarr",
+            ingress_hosts=["radarr.expectedbehaviors.com"],
+            ingress_backend_service_name="radarr",
+            ingress_backend_service_port=7878,
+        )
+        tab = build_desired_tab(ref)
+        assert tab.name == "Radarr"
+        assert tab.url == "https://radarr.expectedbehaviors.com"
+        assert tab.url_local == "http://radarr.media.svc.cluster.local:7878"
+        assert tab.ping_url == "radarr.media:7878"
+        assert tab.image == "plugins/images/tabs/radarr.png"
+        assert tab.tab_type == TabType.IFRAME
+        assert tab.managed_by == "media/ingress/radarr"
+
+    def test_ingress_without_backend_info(self) -> None:
+        """Ingress with host but no backend service info -> no local URL, no ping."""
         ref = _make_ref(
             name="radarr",
             ingress_hosts=["radarr.expectedbehaviors.com"],
         )
         tab = build_desired_tab(ref)
-        assert tab.name == "Radarr"
         assert tab.url == "https://radarr.expectedbehaviors.com"
-        assert tab.image == "plugins/images/tabs/radarr.png"
-        assert tab.tab_type == TabType.IFRAME
-        assert tab.managed_by == "media/ingress/radarr"
+        assert tab.url_local is None
+        assert tab.ping_url is None
+
+    def test_ingress_backend_default_port(self) -> None:
+        """Ingress backend with no port defaults to 80."""
+        ref = _make_ref(
+            name="myapp",
+            ingress_hosts=["myapp.example.com"],
+            ingress_backend_service_name="myapp-svc",
+        )
+        tab = build_desired_tab(ref)
+        assert tab.url_local == "http://myapp-svc.media.svc.cluster.local:80"
+        assert tab.ping_url == "myapp-svc.media:80"
 
     def test_explicit_name_annotation(self) -> None:
         ref = _make_ref(
@@ -68,6 +99,18 @@ class TestBuildDesiredTab:
         )
         tab = build_desired_tab(ref)
         assert tab.url == "https://custom.example.com/radarr"
+
+    def test_explicit_url_local_annotation(self) -> None:
+        """Explicit url-local annotation takes priority over passive derivation."""
+        ref = _make_ref(
+            name="radarr",
+            annotations={f"{ANNOTATION_PREFIX}/url-local": "http://custom-local:9999"},
+            ingress_hosts=["radarr.example.com"],
+            ingress_backend_service_name="radarr",
+            ingress_backend_service_port=7878,
+        )
+        tab = build_desired_tab(ref)
+        assert tab.url_local == "http://custom-local:9999"
 
     def test_explicit_image_url(self) -> None:
         ref = _make_ref(
@@ -96,7 +139,8 @@ class TestBuildDesiredTab:
         tab = build_desired_tab(ref)
         assert tab.tab_type == TabType.NEW_WINDOW
 
-    def test_service_with_cluster_ip(self) -> None:
+    def test_service_derives_local_url_and_ping(self) -> None:
+        """Service -> local URL is http internal DNS, ping is service:port."""
         ref = _make_ref(
             name="sonarr",
             kind="Service",
@@ -107,14 +151,52 @@ class TestBuildDesiredTab:
         assert tab.url_local == "http://sonarr.media.svc.cluster.local:8989"
         assert tab.ping_url == "sonarr.media:8989"
 
-    def test_external_dns_hostname_fallback(self) -> None:
+    def test_service_external_url_from_external_dns(self) -> None:
+        """Service with external-dns annotation -> external URL is https."""
         ref = _make_ref(
             name="myapp",
             kind="Service",
             annotations={"external-dns.alpha.kubernetes.io/hostname": "myapp.expectedbehaviors.com"},
+            service_cluster_ip="10.96.0.50",
+            service_ports=[80],
         )
         tab = build_desired_tab(ref)
         assert tab.url == "https://myapp.expectedbehaviors.com"
+        assert tab.url_local == "http://myapp.media.svc.cluster.local:80"
+
+    def test_service_default_port(self) -> None:
+        """Service with no ports defaults to port 80 for local URL."""
+        ref = _make_ref(
+            name="simple",
+            kind="Service",
+            service_cluster_ip="10.96.0.99",
+        )
+        tab = build_desired_tab(ref)
+        assert tab.url_local == "http://simple.media.svc.cluster.local:80"
+        # No ports -> no ping_url
+        assert tab.ping_url is None
+
+    def test_service_no_cluster_ip_no_local(self) -> None:
+        """Service without ClusterIP (headless) still gets local URL from name."""
+        ref = _make_ref(
+            name="headless",
+            kind="Service",
+            service_ports=[8080],
+        )
+        tab = build_desired_tab(ref)
+        assert tab.url_local == "http://headless.media.svc.cluster.local:8080"
+        assert tab.ping_url == "headless.media:8080"
+
+    def test_external_dns_hostname_fallback_no_service(self) -> None:
+        """Non-Ingress resource with external-dns hostname but no service info."""
+        ref = _make_ref(
+            name="myapp",
+            kind="Deployment",
+            annotations={"external-dns.alpha.kubernetes.io/hostname": "myapp.expectedbehaviors.com"},
+        )
+        tab = build_desired_tab(ref)
+        assert tab.url == "https://myapp.expectedbehaviors.com"
+        assert tab.url_local is None  # Deployment has no service info
 
     def test_app_label_for_name(self) -> None:
         ref = _make_ref(
@@ -156,6 +238,15 @@ class TestBuildDesiredTab:
         assert tab.group_id == 2
         assert tab.category_id == 5
 
+    def test_fallback_url_from_name_namespace(self) -> None:
+        """When no host/hostname info is available, URL falls back to name.namespace."""
+        ref = _make_ref(
+            name="obscure",
+            kind="Deployment",
+        )
+        tab = build_desired_tab(ref)
+        assert tab.url == "https://obscure.media"
+
 
 class TestReconcile:
     def _make_existing_tab(self, tab_id: int, name: str, url: str, **kwargs) -> Tab:
@@ -171,14 +262,22 @@ class TestReconcile:
         assert len(actions.to_delete) == 0
 
     def test_no_changes_needed(self) -> None:
-        refs = [_make_ref(name="radarr", ingress_hosts=["radarr.example.com"])]
+        refs = [
+            _make_ref(
+                name="radarr",
+                ingress_hosts=["radarr.example.com"],
+                ingress_backend_service_name="radarr",
+                ingress_backend_service_port=7878,
+            )
+        ]
         existing = self._make_existing_tab(
             1,
             "Radarr",
             "https://radarr.example.com",
+            url_local="http://radarr.media.svc.cluster.local:7878",
             image="plugins/images/tabs/radarr.png",
             tab_type=TabType.IFRAME,
-            ping_url="radarr.example.com:443",
+            ping_url="radarr.media:7878",
         )
         actions = reconcile(refs, [existing], SyncPolicy.UPSERT)
         assert actions.is_empty
@@ -189,6 +288,8 @@ class TestReconcile:
                 name="radarr",
                 annotations={f"{ANNOTATION_PREFIX}/type": "new-window"},
                 ingress_hosts=["radarr.example.com"],
+                ingress_backend_service_name="radarr",
+                ingress_backend_service_port=7878,
             )
         ]
         existing = self._make_existing_tab(
@@ -197,7 +298,7 @@ class TestReconcile:
             "https://radarr.example.com",
             tab_type=TabType.IFRAME,
             image="plugins/images/tabs/radarr.png",
-            ping_url="radarr.example.com:443",
+            ping_url="radarr.media:7878",
         )
         actions = reconcile(refs, [existing], SyncPolicy.UPSERT)
         assert len(actions.to_update) == 1
@@ -231,16 +332,22 @@ class TestReconcile:
 
     def test_multiple_resources(self) -> None:
         refs = [
-            _make_ref(name="radarr", ingress_hosts=["radarr.example.com"]),
+            _make_ref(
+                name="radarr",
+                ingress_hosts=["radarr.example.com"],
+                ingress_backend_service_name="radarr",
+                ingress_backend_service_port=7878,
+            ),
             _make_ref(name="sonarr", ingress_hosts=["sonarr.example.com"]),
         ]
         existing = self._make_existing_tab(
             1,
             "Radarr",
             "https://radarr.example.com",
+            url_local="http://radarr.media.svc.cluster.local:7878",
             image="plugins/images/tabs/radarr.png",
             tab_type=TabType.IFRAME,
-            ping_url="radarr.example.com:443",
+            ping_url="radarr.media:7878",
         )
         actions = reconcile(refs, [existing], SyncPolicy.UPSERT)
         assert len(actions.to_create) == 1

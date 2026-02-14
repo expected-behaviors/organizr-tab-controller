@@ -82,6 +82,20 @@ def _extract_ref(item: Any, kind_hint: str) -> K8sResourceRef | None:
         rules = item.spec.rules or []
         ref.ingress_hosts = [r.host for r in rules if r.host]
 
+        # Extract the backend service name and port from the first rule's first path
+        for rule in rules:
+            if rule.http and rule.http.paths:
+                for path in rule.http.paths:
+                    backend = getattr(path, "backend", None)
+                    if backend and backend.service:
+                        ref.ingress_backend_service_name = backend.service.name
+                        if backend.service.port:
+                            port_obj = backend.service.port
+                            ref.ingress_backend_service_port = getattr(port_obj, "number", None)
+                        break
+                if ref.ingress_backend_service_name:
+                    break
+
     # Populate Service-specific fields
     if kind.lower() == "service" and hasattr(item, "spec") and item.spec:
         ref.service_cluster_ip = item.spec.cluster_ip or None
