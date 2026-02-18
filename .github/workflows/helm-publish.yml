@@ -1,5 +1,5 @@
 # Package the Helm chart with version-matched image tag and attach to GitHub Release.
-# Released chart tarballs default to image tag = chart version (Sonarr-style).
+# Uses reusable action from github-actions repo. Released chart tarballs default to image tag = chart version (Sonarr-style).
 
 name: Helm chart publish
 
@@ -30,52 +30,9 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set version from release tag
-        id: version
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          if [ "${{ github.event_name }}" = "release" ]; then
-            TAG="${{ github.event.release.tag_name }}"
-          elif [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.release_tag }}" ]; then
-            TAG="${{ inputs.release_tag }}"
-          else
-            TAG=$(gh api "repos/${{ github.repository }}/releases?per_page=1" | jq -r '.[0].tag_name')
-          fi
-          VERSION="${TAG#v}"
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
-          echo "Version: $VERSION"
-
-      - name: Install Helm
-        uses: azure/setup-helm@v4
+      - name: Package and upload Helm chart
+        uses: expectedbehaviors/github-actions/.github/actions/helm-publish@main
         with:
-          version: 'v3.14.0'
-
-      - name: Install yq
-        run: sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 && sudo chmod +x /usr/local/bin/yq
-
-      - name: Prepare chart for release (image tag = chart version)
-        run: |
-          mkdir -p build
-          cp -r helm build/chart
-          cd build/chart
-          # Released chart tarball defaults to image tag = chart version (Sonarr-style)
-          yq e '."organizr-tab-controller".controllers.main.containers.main.image.tag = strenv(VERSION)' -i values.yaml
-          cd ../..
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-
-      - name: Add dependency and package
-        run: |
-          helm repo add bjw-s https://bjw-s-labs.github.io/helm-charts
-          helm dependency update build/chart
-          VERSION="${{ steps.version.outputs.version }}"
-          helm package build/chart --version "$VERSION" --app-version "$VERSION"
-          echo "chart_tarball=organizr-tab-controller-${VERSION}.tgz" >> $GITHUB_ENV
-
-      - name: Upload chart to GitHub Release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release upload "${{ steps.version.outputs.tag }}" ${{ env.chart_tarball }} --clobber
+          chart_name: organizr-tab-controller
+          values_image_tag_key: organizr-tab-controller.controllers.main.containers.main.image.tag
+          release_tag: ${{ github.event.inputs.release_tag }}
