@@ -34,4 +34,6 @@ jobs:
         with:
           image_name: organizr-tab-controller
           repo_prefix: expectedbehaviors
+          docker_username: ${{ secrets.DOCKERHUB_USERNAME }}
+          docker_token: ${{ secrets.DOCKERHUB_TOKEN }}
           image_tag: ${{ github.event.inputs.image_tag }}

@@ -30,4 +30,6 @@ jobs:
       - name: Update release notes from PR (OpenAI)
         uses: expectedbehaviors/github-actions/.github/actions/release-notes@main
         with:
+          openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           release_tag: ${{ github.event.inputs.release_tag }}
