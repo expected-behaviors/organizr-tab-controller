@@ -11,6 +11,8 @@ This project automates the full release cycle: **merge to main** → auto-releas
 | [helm-publish.yml](helm-publish.yml) | **Release published** or *Release on merge* completes | Package chart and upload `.tgz` to the GitHub Release |
 | [release-notes.yml](release-notes.yml) | **Release published** or *Release on merge* completes | Set release body from merged PR; OpenAI summarizes into bullet points (requires `OPENAI_API_KEY`) |
 
+These workflows call reusable composite actions from the **github-actions** repo. Each workflow uses `expectedbehaviors/github-actions/.github/actions/<name>@initial`. To use a different ref (e.g. after tagging the actions repo), replace `@initial` with `@v1` or your branch/tag in all four workflow files.
+
 ### What runs when
 
 - **Merge a PR into `main`** (that touches `docker/`, `src/`, `helm/`, or `pyproject.toml`): **Release on merge** runs → creates the next `v*` tag and a GitHub Release. That **release published** event triggers: **Docker** build/push, **Helm** package/upload, and **Release notes** (OpenAI summary).

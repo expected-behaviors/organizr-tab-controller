@@ -1,6 +1,6 @@
 # Auto-release on merge to main: bump patch version, create tag and release.
 # Triggers Docker build, Helm publish, and release notes (see .github/workflows/README.md).
-# Requires: default branch is main; tags exist as v* (e.g. v0.1.0).
+# Uses reusable action from github-actions repo. Requires: default branch is main; tags exist as v* (e.g. v0.1.0).
 
 name: Release on merge to main
 
@@ -25,30 +25,8 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Get next version
-        id: version
-        run: |
-          LATEST=$(git describe --tags --match 'v*' --abbrev=0 2>/dev/null || echo "v0.0.0")
-          LATEST="${LATEST#v}"
-          MAJOR="${LATEST%%.*}"
-          REST="${LATEST#*.}"
-          MINOR="${REST%%.*}"
-          PATCH="${REST#*.}"
-          [ -z "$MAJOR" ] && MAJOR=0
-          [ -z "$MINOR" ] && MINOR=0
-          [ -z "$PATCH" ] && PATCH=0
-          PATCH=$((PATCH + 1))
-          NEXT="v${MAJOR}.${MINOR}.${PATCH}"
-          echo "tag=$NEXT" >> $GITHUB_OUTPUT
-          echo "Next version: $NEXT"
-
-      - name: Create tag and release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          TAG="${{ steps.version.outputs.tag }}"
-          gh release create "$TAG" \
-            --title "$TAG" \
-            --notes "Auto-release from main. Release notes will be updated shortly." \
-            --latest
-          echo "Created release $TAG"
+      - name: Release on merge (create tag and release)
+        uses: expectedbehaviors/github-actions/.github/actions/release-on-merge@initial
+        id: release
+        with:
+          tag_prefix: v

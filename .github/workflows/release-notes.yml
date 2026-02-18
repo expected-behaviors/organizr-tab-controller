@@ -1,6 +1,5 @@
 # Populate release notes from the merged PR, summarized as bullet points via OpenAI.
-# Requires OPENAI_API_KEY secret (see .github/workflows/README.md). Job fails if unset.
-# Triggers: release published (primary), or when "Release on merge to main" completes (fallback).
+# Uses reusable action from github-actions repo. Requires OPENAI_API_KEY secret (see .github/workflows/README.md).
 
 name: Release notes from PR
 
@@ -28,61 +27,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Get release tag
-        id: tag
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          if [ "${{ github.event_name }}" = "release" ]; then
-            echo "tag=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
-          elif [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.release_tag }}" ]; then
-            echo "tag=${{ inputs.release_tag }}" >> $GITHUB_OUTPUT
-          else
-            TAG=$(gh api "repos/${{ github.repository }}/releases?per_page=1" | jq -r '.[0].tag_name')
-            echo "tag=$TAG" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Find PR merged for this release
-        id: pr
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          TAG="${{ steps.tag.outputs.tag }}"
-          COMMIT_SHA=$(gh api "repos/${{ github.repository }}/git/ref/tags/${TAG}" | jq -r '.object.sha')
-          PR_BODY=$(gh api "repos/${{ github.repository }}/commits/${COMMIT_SHA}/pulls" | jq -r '.[0].body // empty' 2>/dev/null || true)
-          [ -z "$PR_BODY" ] && PR_BODY="Release $TAG"
-          echo "body<<EOF" >> $GITHUB_OUTPUT
-          echo "$PR_BODY" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-      - name: Require OPENAI_API_KEY
-        run: |
-          if [ -z "${{ secrets.OPENAI_API_KEY }}" ]; then
-            echo "::error title=Release notes::OPENAI_API_KEY secret is required. Add it under Settings → Secrets and variables → Actions. See .github/workflows/README.md."
-            exit 1
-          fi
-
-      - name: Summarize release notes (OpenAI)
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          PR_BODY: ${{ steps.pr.outputs.body }}
-        id: summarize
-        run: |
-          echo "$PR_BODY" > /tmp/pr_body.txt
-          SUMMARY=$(jq -n --rawfile b /tmp/pr_body.txt \
-            '{model:"gpt-4o-mini",messages:[{role:"user",content:("Summarize this PR in 2-4 short bullet points for release notes. Only output the bullets, no preamble.\n\n" + $b)}],max_tokens:300}' \
-            | curl -s https://api.openai.com/v1/chat/completions \
-              -H "Authorization: Bearer $OPENAI_API_KEY" \
-              -H "Content-Type: application/json" \
-              -d @- \
-            | jq -r '.choices[0].message.content // empty')
-          echo "summary<<EOF" >> $GITHUB_OUTPUT
-          echo "${SUMMARY:-$PR_BODY}" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-      - name: Update release body
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BODY: ${{ steps.summarize.outputs.summary }}
-        run: |
-          gh release edit "${{ steps.tag.outputs.tag }}" --notes "$BODY"
+      - name: Update release notes from PR (OpenAI)
+        uses: expectedbehaviors/github-actions/.github/actions/release-notes@initial
+        with:
+          release_tag: ${{ github.event.inputs.release_tag }}
