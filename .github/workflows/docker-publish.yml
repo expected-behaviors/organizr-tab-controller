@@ -14,6 +14,11 @@ on:
       - 'README.md'
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Image tag (optional). Default: sha-<short-sha> for manual runs.'
+        required: false
 
 env:
   DOCKER_IMAGE: organizr-tab-controller
@@ -21,7 +26,7 @@ env:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-    if: github.event_name == 'release' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    if: github.event_name == 'release' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     permissions:
       contents: read
     steps:
@@ -33,6 +38,8 @@ jobs:
           if [ "${{ github.event_name }}" = "release" ]; then
             TAG="${GITHUB_REF#refs/tags/v}"
             [ "$GITHUB_REF" = "refs/tags/$TAG" ] && TAG="${GITHUB_REF#refs/tags/}"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.image_tag }}" ]; then
+            TAG="${{ inputs.image_tag }}"
           else
             TAG="sha-${GITHUB_SHA::7}"
           fi
