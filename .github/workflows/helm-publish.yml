@@ -33,7 +33,6 @@ jobs:
       - name: Package and upload Helm chart
         uses: expectedbehaviors/github-actions/.github/actions/helm-publish@main
         with:
-          chart_path: helm
           chart_name: organizr-tab-controller
           values_image_tag_key: organizr-tab-controller.controllers.main.containers.main.image.tag
           release_tag: ${{ github.event.inputs.release_tag }}

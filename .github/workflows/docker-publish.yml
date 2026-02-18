@@ -34,7 +34,4 @@ jobs:
         with:
           image_name: organizr-tab-controller
           repo_prefix: expectedbehaviors
-          dockerfile_path: ./docker/Dockerfile
-          context: .
-          platforms: linux/amd64,linux/arm64
           image_tag: ${{ github.event.inputs.image_tag }}

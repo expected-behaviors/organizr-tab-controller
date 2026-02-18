@@ -28,5 +28,3 @@ jobs:
       - name: Release on merge (create tag and release)
         uses: expectedbehaviors/github-actions/.github/actions/release-on-merge@main
         id: release
-        with:
-          tag_prefix: v
