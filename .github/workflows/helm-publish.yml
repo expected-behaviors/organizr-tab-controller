@@ -40,7 +40,7 @@ jobs:
           elif [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.release_tag }}" ]; then
             TAG="${{ inputs.release_tag }}"
           else
-            TAG=$(gh release list --limit 1 --repo ${{ github.repository }} -q '.[0].tag_name')
+            TAG=$(gh release list --limit 1 --repo ${{ github.repository }} --json tagName -q '.[0].tagName')
           fi
           VERSION="${TAG#v}"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
