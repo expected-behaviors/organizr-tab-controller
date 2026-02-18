@@ -26,7 +26,7 @@ jobs:
           fetch-depth: 0
 
       - name: Release on merge (create tag and release)
-        uses: expectedbehaviors/github-actions/.github/actions/release-on-merge@initial
+        uses: expectedbehaviors/github-actions/.github/actions/release-on-merge@main
         id: release
         with:
           tag_prefix: v

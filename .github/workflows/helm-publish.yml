@@ -31,7 +31,7 @@ jobs:
           fetch-depth: 0
 
       - name: Package and upload Helm chart
-        uses: expectedbehaviors/github-actions/.github/actions/helm-publish@initial
+        uses: expectedbehaviors/github-actions/.github/actions/helm-publish@main
         with:
           chart_path: helm
           chart_name: organizr-tab-controller

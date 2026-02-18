@@ -28,6 +28,6 @@ jobs:
           fetch-depth: 0
 
       - name: Update release notes from PR (OpenAI)
-        uses: expectedbehaviors/github-actions/.github/actions/release-notes@initial
+        uses: expectedbehaviors/github-actions/.github/actions/release-notes@main
         with:
           release_tag: ${{ github.event.inputs.release_tag }}
