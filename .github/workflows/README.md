@@ -8,8 +8,8 @@ This project automates the full release cycle: **merge to main** → auto-releas
 |---------------|---------|--------|
 | [release-on-merge.yml](release-on-merge.yml) | Push to `main` (code paths only) | Bump patch version, create tag (e.g. `v0.1.1`) and publish GitHub Release |
 | [docker-publish.yml](docker-publish.yml) | **Release published** (and push to `main` for `latest`) | Build image and push to Docker Hub |
-| [helm-publish.yml](helm-publish.yml) | **Release published** | Package chart and upload `.tgz` to the GitHub Release |
-| [release-notes.yml](release-notes.yml) | **Release published** | Set release body from merged PR; OpenAI summarizes into bullet points (requires `OPENAI_API_KEY`) |
+| [helm-publish.yml](helm-publish.yml) | **Release published** or *Release on merge* completes | Package chart and upload `.tgz` to the GitHub Release |
+| [release-notes.yml](release-notes.yml) | **Release published** or *Release on merge* completes | Set release body from merged PR; OpenAI summarizes into bullet points (requires `OPENAI_API_KEY`) |
 
 ### What runs when
 
@@ -18,6 +18,12 @@ This project automates the full release cycle: **merge to main** → auto-releas
 - **Push to `main`** without those paths (e.g. docs only): no new release; **Docker** still runs if its paths changed (tags `latest` and `sha-*`).
 
 - **Manually create a release** (tag + publish in the UI or `gh release create`): same as above – Docker, Helm, and release notes all run.
+
+**Note:** Helm publish and Release notes also run when **Release on merge to main** completes (workflow_run fallback). That way they still run even if the `release: published` event doesn’t trigger them (e.g. release created by another workflow).
+
+**Manual run:** You can run **Docker build and publish**, **Helm chart publish**, and **Release notes from PR** from the Actions tab (**Run workflow**). Optional inputs:
+- **Docker:** `image_tag` – tag for the image (default: `sha-<short-sha>`).
+- **Helm / Release notes:** `release_tag` – e.g. `v0.1.0` (default: latest release).
 
 ---
 

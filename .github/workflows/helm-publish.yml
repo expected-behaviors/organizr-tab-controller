@@ -6,6 +6,15 @@ name: Helm chart publish
 on:
   release:
     types: [published]
+  workflow_run:
+    workflows: ["Release on merge to main"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag (e.g. v0.1.0). Default: latest release.'
+        required: false
 
 permissions:
   contents: read
@@ -13,6 +22,7 @@ permissions:
 jobs:
   package-and-upload:
     runs-on: ubuntu-latest
+    if: github.event_name == 'release' || github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     permissions:
       contents: write
     steps:
@@ -20,18 +30,27 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Set version from release tag
+        id: version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            TAG="${{ github.event.release.tag_name }}"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.release_tag }}" ]; then
+            TAG="${{ inputs.release_tag }}"
+          else
+            TAG=$(gh release list --limit 1 --repo ${{ github.repository }} -q '.[0].tag_name')
+          fi
+          VERSION="${TAG#v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
       - name: Install Helm
         uses: azure/setup-helm@v4
         with:
           version: 'v3.14.0'
-
-      - name: Set version from release tag
-        id: version
-        run: |
-          VERSION="${GITHUB_REF#refs/tags/}"
-          VERSION="${VERSION#v}"
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Version: $VERSION"
 
       - name: Install yq
         run: sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 && sudo chmod +x /usr/local/bin/yq
@@ -58,4 +77,4 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload "${{ github.event.release.tag_name }}" ${{ env.chart_tarball }} --clobber
+          gh release upload "${{ steps.version.outputs.tag }}" ${{ env.chart_tarball }} --clobber
