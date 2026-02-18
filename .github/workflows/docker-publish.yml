@@ -60,7 +60,8 @@ jobs:
         with:
           context: .
           file: ./docker/Dockerfile
-          platforms: linux/amd64,linux/arm64,linux/arm/v7
+          # Chainguard python image does not publish linux/arm/v7; amd64 + arm64 only
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: |
             ${{ env.DOCKER_REPO_PREFIX }}/${{ env.DOCKER_IMAGE }}:${{ steps.version.outputs.tag }}
