@@ -1,0 +1,63 @@
+# Populate release notes from the merged PR, summarized as bullet points via OpenAI.
+# Requires OPENAI_API_KEY (see docs/CI-CD.md). Falls back to PR body verbatim if unset.
+
+name: Release notes from PR
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  update-release-notes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Find PR merged for this release
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          COMMIT_SHA=$(gh api repos/${{ github.repository }}/git/ref/tags/${TAG} --jq .object.sha)
+          PR_BODY=$(gh api "repos/${{ github.repository }}/commits/${COMMIT_SHA}/pulls" --jq '.[0].body // empty' 2>/dev/null || true)
+          [ -z "$PR_BODY" ] && PR_BODY="Release $TAG"
+          echo "body<<EOF" >> $GITHUB_OUTPUT
+          echo "$PR_BODY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Summarize release notes (OpenAI)
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          PR_BODY: ${{ steps.pr.outputs.body }}
+        id: summarize
+        run: |
+          if [ -z "$OPENAI_API_KEY" ]; then
+            echo "::notice title=Release notes::OPENAI_API_KEY not set. Using PR description as-is. See docs/CI-CD.md to enable bullet-point summaries."
+            echo "summary<<EOF" >> $GITHUB_OUTPUT
+            echo "$PR_BODY" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          echo "$PR_BODY" > /tmp/pr_body.txt
+          SUMMARY=$(jq -n --rawfile b /tmp/pr_body.txt \
+            '{model:"gpt-4o-mini",messages:[{role:"user",content:("Summarize this PR in 2-4 short bullet points for release notes. Only output the bullets, no preamble.\n\n" + $b)}],max_tokens:300}' \
+            | curl -s https://api.openai.com/v1/chat/completions \
+              -H "Authorization: Bearer $OPENAI_API_KEY" \
+              -H "Content-Type: application/json" \
+              -d @- \
+            --jq -r '.choices[0].message.content // empty')
+          echo "summary<<EOF" >> $GITHUB_OUTPUT
+          echo "${SUMMARY:-$PR_BODY}" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Update release body
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BODY: ${{ steps.summarize.outputs.summary }}
+        run: |
+          gh release edit ${{ github.event.release.tag_name }} --notes "$BODY"

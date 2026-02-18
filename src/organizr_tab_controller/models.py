@@ -2,17 +2,34 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 
+@dataclass(frozen=True)
+class DesiredTabSpec:
+    """A desired tab plus optional group/category names and icons for resolution.
+
+    The controller resolves group_name and category_name to API IDs (creating
+    categories if missing) and sets group/category icons before creating or
+    updating the tab.
+    """
+
+    tab: "Tab"
+    group_name: str | None = None
+    category_name: str | None = None
+    group_icon: str | None = None
+    category_icon: str | None = None
+
+
 # ---------------------------------------------------------------------------
-# Annotation constants
+# Annotation constants (generic; usable with any Kubernetes + Organizr setup)
 # ---------------------------------------------------------------------------
 
-ANNOTATION_PREFIX = "organizr.expectedbehaviors.com"
+ANNOTATION_PREFIX = "organizr-tab-controller.io"
 """Annotation prefix used on Kubernetes resources to declare Organizr tab config."""
 
 
@@ -29,8 +46,11 @@ ANNOTATION_URL_LOCAL = "url-local"
 ANNOTATION_PING_URL = "ping-url"
 ANNOTATION_IMAGE = "image"
 ANNOTATION_TYPE = "type"
-ANNOTATION_GROUP_ID = "group-id"
-ANNOTATION_CATEGORY_ID = "category-id"
+# Human-readable names; controller resolves to API IDs (creates category if missing)
+ANNOTATION_GROUP = "group"
+ANNOTATION_CATEGORY = "category"
+ANNOTATION_GROUP_ICON = "group-icon"
+ANNOTATION_CATEGORY_ICON = "category-icon"
 ANNOTATION_ORDER = "order"
 ANNOTATION_DEFAULT = "default"
 ANNOTATION_ACTIVE = "active"

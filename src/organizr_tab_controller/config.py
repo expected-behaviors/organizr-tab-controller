@@ -30,7 +30,7 @@ class ControllerSettings(BaseSettings):
     # Organizr connection -------------------------------------------------------
     api_url: str = Field(
         ...,
-        description="Base URL of the Organizr instance (e.g. https://organizr.expectedbehaviors.com)",
+        description="Base URL of the Organizr instance (e.g. https://organizr.example.com)",
     )
     api_key: str = Field(
         default="",
@@ -79,7 +79,7 @@ class ControllerSettings(BaseSettings):
         description="Seconds between full reconciliation sweeps.",
     )
 
-    # HA / leader election ------------------------------------------------------
+    # HA / leader election (reserved for future use; not yet implemented) --------
     enable_leader_election: bool = Field(
         default=False,
         description="Enable leader election for HA deployments (multiple replicas).",

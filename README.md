@@ -2,6 +2,15 @@
 
 A Kubernetes controller that automatically manages [Organizr](https://organizr.app) tabs by watching annotated Kubernetes resources. Inspired by the patterns used by [external-dns](https://github.com/kubernetes-sigs/external-dns) and [Reloader](https://github.com/stakater/Reloader).
 
+## Project layout
+
+| Path | Purpose |
+|------|--------|
+| **Root** | Tool source code (`src/`, `tests/`), and this README (overview, annotations, config, development). |
+| **[docker/](docker/)** | Container image build (hardened Chainguard Python base, non-root). Build from repo root. |
+| **[helm/](helm/)** | Kubernetes deployment chart. [BJW-S app-template](https://bjw-s-labs.github.io/helm-charts/docs/app-template/) wrapper with HPA, no ingress, RBAC; only what the controller needs. |
+| **[docs/](docs/)** | [CI-CD.md](docs/CI-CD.md) – GitHub Actions (Docker Hub, Helm, release notes), required secrets, and Artifact Hub. |
+
 ## Overview
 
 Instead of manually configuring Organizr tabs through the UI, annotate your Kubernetes Ingresses, Services, Deployments (or any resource) and let the controller create, update, and optionally delete Organizr tabs automatically.
@@ -27,7 +36,7 @@ Add a single annotation to opt in:
 ingress:
   main:
     annotations:
-      organizr.expectedbehaviors.com/enabled: "true"
+      organizr-tab-controller.io/enabled: "true"
       # Everything else is auto-derived!
 ```
 
@@ -40,23 +49,30 @@ The controller will automatically determine:
 ### 2. Deploy the controller
 
 ```bash
-# Build the container
-docker build -t organizr-tab-controller:latest .
+# Build the container (from repo root)
+docker build -f docker/Dockerfile -t organizr-tab-controller:latest .
 
 # Or run directly with Python
 pip install -e .
 ORGANIZR_API_URL=https://organizr.example.com \
 ORGANIZR_API_KEY=your-api-key \
 python -m organizr_tab_controller
+
+# Or install the Helm chart (HPA, no ingress; see helm/README.md)
+helm dependency update helm/
+helm install organizr-tab-controller ./helm -n organizr --create-namespace \
+  --set organizr-tab-controller.controllers.main.containers.main.env.ORGANIZR_API_URL=https://organizr.example.com
 ```
 
 ### 3. Watch tabs appear in Organizr
 
 The controller reconciles every 60 seconds (configurable) and reacts to Kubernetes watch events in real-time.
 
+Annotations use a **generic prefix** (`organizr-tab-controller.io`) so the same manifests work with any Kubernetes + Organizr setup, not tied to a specific domain.
+
 ## Annotation Reference
 
-All annotations use the prefix `organizr.expectedbehaviors.com/`.
+All annotations use the prefix `organizr-tab-controller.io/`. Group and category are specified by **human-readable names**; the controller resolves them to Organizr API IDs (and creates categories if missing) before creating or updating tabs.
 
 | Annotation | Required | Default | Description |
 |---|---|---|---|
@@ -67,8 +83,10 @@ All annotations use the prefix `organizr.expectedbehaviors.com/`.
 | `ping-url` | No | From Service name:port or Ingress host:443 | Health check endpoint (no scheme) |
 | `image` | No | Auto-matched from app name | Icon: known name (e.g. `radarr`), full URL, or `fontawesome::icon` |
 | `type` | No | `iframe` | Tab type: `iframe`, `new-window`, or `internal` |
-| `group-id` | No | `1` | Organizr group ID for access control |
-| `category-id` | No | - | Organizr category ID |
+| `group` | No | (default group) | **Group name** (e.g. `Media`, `Admin`). Controller resolves to Organizr group ID; does not create groups. |
+| `group-icon` | No | - | Icon for the group: filename only (e.g. `media.png` → path completion), full path, or `http(s)://` URL. Applied when group exists. |
+| `category` | No | - | **Category name** (e.g. `Media Apps`). Controller creates the category if missing, then assigns the tab to it. |
+| `category-icon` | No | - | Icon for the category: filename only, full path, or `http(s)://` URL. Set when creating or updating the category. |
 | `order` | No | Auto-assigned | Tab position/weight |
 | `default` | No | `false` | Default tab on login |
 | `active` | No | `true` | Whether the tab is enabled |
@@ -97,6 +115,16 @@ All settings are configured via environment variables with the `ORGANIZR_` prefi
 
 *Either `ORGANIZR_API_KEY` or a valid file at `ORGANIZR_API_KEY_FILE` is required.
 
+### Group and category icons
+
+For `group-icon` and `category-icon`:
+
+- **Filename only** (e.g. `media.png`): the controller prepends Organizr’s default path (`plugins/images/groups/` or `plugins/images/categories/`) so the icon is resolved relative to Organizr’s install.
+- **Full path** (e.g. `plugins/custom/groups/my.png`): used as-is.
+- **`http://` or `https://` URL**: used as-is.
+
+Categories can be created by name; the controller ensures the category exists (and sets its icon if provided) before creating tabs. Groups are matched by name only; the controller does not create groups but can set an icon for an existing group.
+
 ## Examples
 
 ### Minimal: auto-derive everything
@@ -107,7 +135,7 @@ All settings are configured via environment variables with the `ORGANIZR_` prefi
 ingress:
   main:
     annotations:
-      organizr.expectedbehaviors.com/enabled: "true"
+      organizr-tab-controller.io/enabled: "true"
     hosts:
       - host: radarr.example.com
         paths:
@@ -120,12 +148,14 @@ ingress:
 ingress:
   main:
     annotations:
-      organizr.expectedbehaviors.com/enabled: "true"
-      organizr.expectedbehaviors.com/name: "Movie Manager"
-      organizr.expectedbehaviors.com/image: "https://cdn.example.com/custom-icon.png"
-      organizr.expectedbehaviors.com/type: "new-window"
-      organizr.expectedbehaviors.com/group-id: "2"
-      organizr.expectedbehaviors.com/category-id: "3"
+      organizr-tab-controller.io/enabled: "true"
+      organizr-tab-controller.io/name: "Movie Manager"
+      organizr-tab-controller.io/image: "https://cdn.example.com/custom-icon.png"
+      organizr-tab-controller.io/type: "new-window"
+      organizr-tab-controller.io/group: "Media"
+      organizr-tab-controller.io/category: "Media Apps"
+      organizr-tab-controller.io/group-icon: "media.png"
+      organizr-tab-controller.io/category-icon: "https://example.com/cat.png"
 ```
 
 ### Service-level annotation
@@ -135,8 +165,8 @@ ingress:
 service:
   main:
     annotations:
-      organizr.expectedbehaviors.com/enabled: "true"
-      organizr.expectedbehaviors.com/url: "https://myapp.example.com"
+      organizr-tab-controller.io/enabled: "true"
+      organizr-tab-controller.io/url: "https://myapp.example.com"
 ```
 
 ### Deployment-level annotation
@@ -148,14 +178,14 @@ defaultPodOptions:
 controllers:
   main:
     annotations:
-      organizr.expectedbehaviors.com/enabled: "true"
-      organizr.expectedbehaviors.com/url: "https://myapp.example.com"
-      organizr.expectedbehaviors.com/image: "fontawesome::server"
+      organizr-tab-controller.io/enabled: "true"
+      organizr-tab-controller.io/url: "https://myapp.example.com"
+      organizr-tab-controller.io/image: "fontawesome::server"
 ```
 
-## Kubernetes Deployment
+## Kubernetes deployment (raw manifests)
 
-Example Kubernetes manifests for deploying the controller:
+Example Kubernetes manifests for deploying the controller (alternative to the [Helm chart](helm/)):
 
 ```yaml
 apiVersion: apps/v1
@@ -179,7 +209,7 @@ spec:
           image: ghcr.io/jd4883/organizr-tab-controller:latest
           env:
             - name: ORGANIZR_API_URL
-              value: "https://organizr.expectedbehaviors.com"
+              value: "https://organizr-tab-controller.io"
             - name: ORGANIZR_API_KEY_FILE
               value: "/var/run/secrets/organizr/api-key"
             - name: ORGANIZR_SYNC_POLICY
@@ -248,7 +278,7 @@ roleRef:
 
 ## Passive Derivation Logic
 
-When only `organizr.expectedbehaviors.com/enabled: "true"` is set, the controller automatically derives:
+When only `organizr-tab-controller.io/enabled: "true"` is set, the controller automatically derives:
 
 1. **Name**: `app.kubernetes.io/name` label (title-cased), falling back to the resource name
 2. **URL**: First Ingress host with HTTPS scheme, or `external-dns.alpha.kubernetes.io/hostname`
@@ -273,6 +303,8 @@ Custom icons: set `image` annotation to any URL or `fontawesome::icon-name`.
 
 ## Development
 
+From the repo root:
+
 ```bash
 # Clone and install
 git clone git@github.com:jd4883/organizr-tab-controller.git
@@ -289,6 +321,9 @@ ruff check src/ tests/
 
 # Type check
 mypy src/
+
+# Build image (context = root)
+docker build -f docker/Dockerfile -t organizr-tab-controller:latest .
 ```
 
 ## Architecture

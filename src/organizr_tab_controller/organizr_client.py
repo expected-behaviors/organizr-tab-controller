@@ -7,6 +7,11 @@ from typing import Any
 import httpx
 import structlog
 
+from organizr_tab_controller.icon_matcher import (
+    DEFAULT_CATEGORY_ICON_PATH_PREFIX,
+    DEFAULT_GROUP_ICON_PATH_PREFIX,
+    normalize_icon_spec,
+)
 from organizr_tab_controller.models import Tab, TabType
 
 logger = structlog.get_logger(__name__)
@@ -75,6 +80,13 @@ class OrganizrClient:
 
     def _v1_tab_list_url(self) -> str:
         return "/api/?v1/tab/list"
+
+    # -- categories (v2; optional endpoints - may not exist on all Organizr versions)
+    def _v2_categories_url(self, path: str = "") -> str:
+        return f"/api/v2/categories{path}"
+
+    def _v2_groups_url(self) -> str:
+        return "/api/v2/groups"
 
     # -- public interface -------------------------------------------------------
 
@@ -237,6 +249,139 @@ class OrganizrClient:
             ping=_bool(raw.get("ping", 1)),
             preload=_bool(raw.get("preload", 0)),
         )
+
+    # -- groups and categories (name resolution, ensure-before-tab) ------------
+
+    def list_categories(self) -> list[dict[str, Any]]:
+        """List tab categories. Returns empty list if endpoint is not available."""
+        if self._api_version != "v2":
+            return []
+        try:
+            resp = self.client.get(self._v2_categories_url())
+            self._check_response(resp, "list categories")
+            data = resp.json()
+            items = data.get("data", data) if isinstance(data, dict) else data
+            if isinstance(items, list):
+                return items
+            if isinstance(items, dict) and "categories" in items:
+                return items["categories"]
+            return []
+        except OrganizrAPIError:
+            raise
+        except Exception as e:
+            logger.warning("list_categories_failed", error=str(e))
+            return []
+
+    def list_groups(self) -> list[dict[str, Any]]:
+        """List user groups (for tab access). Returns empty list if endpoint not available."""
+        if self._api_version != "v2":
+            return []
+        try:
+            resp = self.client.get(self._v2_groups_url())
+            self._check_response(resp, "list groups")
+            data = resp.json()
+            items = data.get("data", data) if isinstance(data, dict) else data
+            if isinstance(items, list):
+                return items
+            if isinstance(items, dict) and "groups" in items:
+                return items["groups"]
+            return []
+        except OrganizrAPIError:
+            raise
+        except Exception as e:
+            logger.warning("list_groups_failed", error=str(e))
+            return []
+
+    def resolve_group_id_by_name(self, name: str) -> int:
+        """Resolve a group name to an API group ID. Returns 1 (default) if not found."""
+        if not name or not name.strip():
+            return 1
+        name_clean = name.strip()
+        for g in self.list_groups():
+            gname = g.get("name", g.get("group_name", ""))
+            if str(gname).strip().lower() == name_clean.lower():
+                gid = g.get("id", g.get("group_id"))
+                if gid is not None:
+                    return int(gid)
+        logger.debug("group_name_not_found_using_default", name=name_clean)
+        return 1
+
+    def ensure_category_by_name(self, name: str, icon: str | None = None) -> int | None:
+        """Get or create a category by name; set icon if provided. Returns category ID or None."""
+        if not name or not name.strip():
+            return None
+        name_clean = name.strip()
+        icon_normalized = (
+            normalize_icon_spec(icon, DEFAULT_CATEGORY_ICON_PATH_PREFIX) if icon else None
+        )
+        categories = self.list_categories()
+        for c in categories:
+            cname = c.get("name", c.get("category_name", ""))
+            if str(cname).strip().lower() == name_clean.lower():
+                cid = c.get("id", c.get("category_id"))
+                if cid is not None:
+                    cat_id = int(cid)
+                    if icon_normalized and c.get("image", c.get("icon", "")) != icon_normalized:
+                        self._update_category_icon(cat_id, icon_normalized)
+                    return cat_id
+        # Create new category
+        try:
+            new_id = self._create_category(name_clean, icon_normalized)
+            if new_id is not None:
+                logger.info("category_created", name=name_clean, id=new_id)
+            return new_id
+        except Exception as e:
+            logger.warning("create_category_failed", name=name_clean, error=str(e))
+            return None
+
+    def ensure_group_icon_by_name(self, name: str, icon: str | None = None) -> None:
+        """If a group exists with this name, update its icon. Does not create groups."""
+        if not name or not icon:
+            return
+        name_clean = name.strip()
+        icon_normalized = normalize_icon_spec(icon, DEFAULT_GROUP_ICON_PATH_PREFIX)
+        for g in self.list_groups():
+            gname = g.get("name", g.get("group_name", ""))
+            if str(gname).strip().lower() == name_clean.lower():
+                gid = g.get("id", g.get("group_id"))
+                if gid is not None and g.get("image", g.get("icon", "")) != icon_normalized:
+                    self._update_group_icon(int(gid), icon_normalized)
+                return
+
+    def _create_category(self, name: str, icon: str | None) -> int | None:
+        try:
+            payload: dict[str, Any] = {"name": name}
+            if icon:
+                payload["image"] = icon
+            resp = self.client.post(self._v2_categories_url(), json=payload)
+            self._check_response(resp, "create category")
+            data = resp.json()
+            created = data.get("data", data)
+            if isinstance(created, dict) and "id" in created:
+                return int(created["id"])
+            return None
+        except Exception:
+            return None
+
+    def _update_category_icon(self, category_id: int, icon: str) -> None:
+        try:
+            resp = self.client.put(
+                self._v2_categories_url(f"/{category_id}"),
+                json={"image": icon},
+            )
+            self._check_response(resp, f"update category {category_id} icon")
+        except Exception as e:
+            logger.warning("update_category_icon_failed", category_id=category_id, error=str(e))
+
+    def _update_group_icon(self, group_id: int, icon: str) -> None:
+        try:
+            resp = self.client.put(
+                self._v2_groups_url() + f"/{group_id}",
+                json={"image": icon},
+            )
+            self._check_response(resp, f"update group {group_id} icon")
+        except Exception as e:
+            logger.warning("update_group_icon_failed", group_id=group_id, error=str(e))
 
     @staticmethod
     def _check_response(resp: httpx.Response, context: str) -> None:

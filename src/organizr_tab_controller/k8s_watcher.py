@@ -2,7 +2,7 @@
 
 Watches Ingresses, Services, Deployments, StatefulSets, DaemonSets (and any
 other configured resource type) across one or more namespaces for the
-``organizr.expectedbehaviors.com/enabled`` annotation.
+``organizr-tab-controller.io/enabled`` annotation.
 
 The watcher produces :class:`K8sResourceRef` objects that downstream
 components use to derive desired Organizr tabs.

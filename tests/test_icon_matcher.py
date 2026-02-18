@@ -1,6 +1,12 @@
 """Tests for the icon_matcher module."""
 
-from organizr_tab_controller.icon_matcher import match_icon, normalise_name
+from organizr_tab_controller.icon_matcher import (
+    DEFAULT_CATEGORY_ICON_PATH_PREFIX,
+    DEFAULT_GROUP_ICON_PATH_PREFIX,
+    match_icon,
+    normalise_name,
+    normalize_icon_spec,
+)
 
 
 class TestNormaliseName:
@@ -80,3 +86,28 @@ class TestMatchIcon:
     def test_homelab_common(self) -> None:
         for app in ["grafana", "portainer", "pihole", "organizr", "ombi", "tautulli"]:
             assert match_icon(app) is not None, f"Missing icon for {app}"
+
+
+class TestNormalizeIconSpec:
+    def test_filename_only_group(self) -> None:
+        assert (
+            normalize_icon_spec("media.png", DEFAULT_GROUP_ICON_PATH_PREFIX)
+            == "plugins/images/groups/media.png"
+        )
+
+    def test_filename_only_category(self) -> None:
+        assert (
+            normalize_icon_spec("apps.png", DEFAULT_CATEGORY_ICON_PATH_PREFIX)
+            == "plugins/images/categories/apps.png"
+        )
+
+    def test_https_url_passthrough(self) -> None:
+        url = "https://example.com/icon.png"
+        assert normalize_icon_spec(url, DEFAULT_GROUP_ICON_PATH_PREFIX) == url
+
+    def test_full_path_passthrough(self) -> None:
+        path = "plugins/custom/groups/my.png"
+        assert normalize_icon_spec(path, DEFAULT_GROUP_ICON_PATH_PREFIX) == path
+
+    def test_empty_returns_empty(self) -> None:
+        assert normalize_icon_spec("", DEFAULT_GROUP_ICON_PATH_PREFIX) == ""

@@ -1,11 +1,13 @@
-"""Passive icon matching for common homelab applications.
+"""Passive icon matching and icon spec normalization for Organizr.
 
-When no explicit ``organizr.expectedbehaviors.com/image`` annotation is set on
+When no explicit ``organizr-tab-controller.io/image`` annotation is set on
 a Kubernetes resource, the controller attempts to match the app name against a
 built-in dictionary of known icons that ship with Organizr.
 
 Organizr stores its built-in tab images under ``plugins/images/tabs/`` (PNG)
 and also recognises ``fontawesome::<icon-name>`` references.
+
+Group and category icons support: filename-only (path completion), full path, or http(s) URL.
 """
 
 from __future__ import annotations
@@ -160,3 +162,31 @@ def match_icon(app_name: str) -> str | None:
 def get_all_known_icons() -> dict[str, str]:
     """Return a copy of the full icon mapping (useful for debugging / docs)."""
     return dict(_ICON_MAP)
+
+
+# Default path prefixes for group/category icons when only a filename is given
+DEFAULT_GROUP_ICON_PATH_PREFIX = "plugins/images/groups/"
+DEFAULT_CATEGORY_ICON_PATH_PREFIX = "plugins/images/categories/"
+
+
+def normalize_icon_spec(value: str, default_path_prefix: str) -> str:
+    """Normalize a group or category icon annotation to a full path or URL.
+
+    - If value is empty, returns empty string.
+    - If value starts with ``http://`` or ``https://``, returns as-is (URL).
+    - If value contains ``/``, treated as a full path; returns as-is.
+    - Otherwise treated as filename only (e.g. ``media.png``); returns
+      ``default_path_prefix + value`` (e.g. ``plugins/images/groups/media.png``).
+
+    This allows annotations to specify either a filename (for Organizr's default
+    library), a path, or a custom URL.
+    """
+    if not value or not value.strip():
+        return ""
+    v = value.strip()
+    if v.startswith(("http://", "https://")):
+        return v
+    if "/" in v:
+        return v
+    prefix = default_path_prefix.rstrip("/") + "/"
+    return prefix + v

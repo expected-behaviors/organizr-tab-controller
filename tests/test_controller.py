@@ -33,7 +33,7 @@ def _make_ref(name: str = "radarr", namespace: str = "media") -> K8sResourceRef:
         namespace=namespace,
         name=name,
         uid=f"uid-{name}",
-        annotations={"organizr.expectedbehaviors.com/enabled": "true"},
+        annotations={"organizr-tab-controller.io/enabled": "true"},
         labels={"app.kubernetes.io/name": name},
         ingress_hosts=[f"{name}.example.com"],
     )

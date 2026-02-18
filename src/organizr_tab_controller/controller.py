@@ -137,6 +137,7 @@ class TabController:
                 desired_refs=refs,
                 actual_tabs=actual_tabs,
                 sync_policy=self._settings.sync_policy,
+                organizr_client=self._organizr,
             )
 
             if actions.is_empty:

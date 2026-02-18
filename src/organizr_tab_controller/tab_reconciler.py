@@ -1,21 +1,25 @@
 """Tab reconciler — converts K8s resource refs into desired Organizr tabs and
 diffs them against the actual state to produce create / update / delete actions.
+
+Group and category are specified by human-readable names; the controller resolves
+them to API IDs (and creates categories if missing) before creating or updating tabs.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-
 import structlog
 
 from organizr_tab_controller.icon_matcher import match_icon
 from organizr_tab_controller.models import (
     ANNOTATION_PREFIX,
+    DesiredTabSpec,
     K8sResourceRef,
     SyncPolicy,
     Tab,
     TabType,
 )
+from organizr_tab_controller.organizr_client import OrganizrClient
 
 logger = structlog.get_logger(__name__)
 
@@ -73,8 +77,8 @@ def _int_ann(annotations: dict[str, str], key: str, default: int | None) -> int 
         return default
 
 
-def build_desired_tab(ref: K8sResourceRef) -> Tab:
-    """Construct a desired :class:`Tab` from a Kubernetes resource reference.
+def build_desired_tab(ref: K8sResourceRef) -> DesiredTabSpec:
+    """Construct a :class:`DesiredTabSpec` (tab + group/category names and icons) from a K8s resource.
 
     Uses explicit annotations where set, then falls back to passive derivation.
 
@@ -150,9 +154,14 @@ def build_desired_tab(ref: K8sResourceRef) -> Tab:
     else:
         tab_type = TabType.IFRAME
 
+    # ---- Group and category: human-readable names (and optional icons) --------
+    # Controller resolves names to API IDs; categories are created if missing
+    group_name = ann.get(_ann("group"), "").strip() or None
+    category_name = ann.get(_ann("category"), "").strip() or None
+    group_icon = ann.get(_ann("group-icon"), "").strip() or None
+    category_icon = ann.get(_ann("category-icon"), "").strip() or None
+
     # ---- Other fields ---------------------------------------------------------
-    group_id = _int_ann(ann, "group-id", 1) or 1
-    category_id = _int_ann(ann, "category-id", None)
     order = _int_ann(ann, "order", None)
     is_default = _bool_ann(ann, "default", False)
     active = _bool_ann(ann, "active", True)
@@ -160,15 +169,15 @@ def build_desired_tab(ref: K8sResourceRef) -> Tab:
     ping_enabled = _bool_ann(ann, "ping", ping_url is not None)
     preload = _bool_ann(ann, "preload", False)
 
-    return Tab(
+    tab = Tab(
         name=name,
         url=url,
         url_local=url_local,
         ping_url=ping_url,
         image=image,
         tab_type=tab_type,
-        group_id=group_id,
-        category_id=category_id,
+        group_id=1,  # resolved from group_name by reconcile when client is provided
+        category_id=None,  # resolved from category_name by reconcile when client is provided
         order=order,
         default=is_default,
         active=active,
@@ -176,6 +185,13 @@ def build_desired_tab(ref: K8sResourceRef) -> Tab:
         ping=ping_enabled,
         preload=preload,
         managed_by=ref.tracking_key,
+    )
+    return DesiredTabSpec(
+        tab=tab,
+        group_name=group_name,
+        category_name=category_name,
+        group_icon=group_icon,
+        category_icon=category_icon,
     )
 
 
@@ -206,10 +222,44 @@ def _match_tab_by_name(desired: Tab, actual_tabs: list[Tab]) -> Tab | None:
     return None
 
 
+def _resolve_specs_to_tabs(specs: list[DesiredTabSpec], client: OrganizrClient) -> list[Tab]:
+    """Ensure groups and categories exist, resolve names to IDs, return list of Tabs."""
+    # Ensure categories and group icons first (so IDs exist before we create tabs)
+    category_name_to_id: dict[str, int] = {}
+    for spec in specs:
+        if spec.category_name and spec.category_name not in category_name_to_id:
+            cid = client.ensure_category_by_name(spec.category_name, spec.category_icon)
+            if cid is not None:
+                category_name_to_id[spec.category_name] = cid
+        if spec.group_name and spec.group_icon:
+            client.ensure_group_icon_by_name(spec.group_name, spec.group_icon)
+
+    # Build tabs with resolved IDs
+    tabs: list[Tab] = []
+    for spec in specs:
+        group_id = (
+            client.resolve_group_id_by_name(spec.group_name)
+            if spec.group_name
+            else spec.tab.group_id
+        )
+        category_id = (
+            category_name_to_id.get(spec.category_name)
+            if spec.category_name
+            else spec.tab.category_id
+        )
+        tabs.append(
+            spec.tab.model_copy(
+                update={"group_id": group_id, "category_id": category_id}
+            )
+        )
+    return tabs
+
+
 def reconcile(
     desired_refs: list[K8sResourceRef],
     actual_tabs: list[Tab],
     sync_policy: SyncPolicy,
+    organizr_client: OrganizrClient | None = None,
 ) -> ReconcileActions:
     """Compute the set of API actions needed to reconcile desired state with actual.
 
@@ -221,6 +271,9 @@ def reconcile(
         Current tabs fetched from the Organizr API.
     sync_policy:
         ``upsert`` or ``sync``.
+    organizr_client:
+        If provided, group and category names are resolved to API IDs; categories
+        are created if missing, and group/category icons are set.
 
     Returns
     -------
@@ -229,18 +282,24 @@ def reconcile(
     """
     actions = ReconcileActions()
 
-    # Build desired tabs
-    desired_tabs: list[Tab] = []
+    # Build desired tab specs (with optional group/category names)
+    specs: list[DesiredTabSpec] = []
     for ref in desired_refs:
         try:
-            desired_tabs.append(build_desired_tab(ref))
+            specs.append(build_desired_tab(ref))
         except Exception:
             logger.exception("build_tab_error", resource=ref.tracking_key)
+
+    # Resolve group/category names to IDs if client is available
+    if organizr_client:
+        desired_tabs = _resolve_specs_to_tabs(specs, organizr_client)
+    else:
+        desired_tabs = [s.tab.model_copy(update={"group_id": 1, "category_id": None}) for s in specs]
 
     # Track which actual tabs are "claimed" by a desired tab
     claimed_ids: set[int] = set()
 
-    for desired in desired_tabs:
+    for desired in desired_tabs:  # list[Tab] after resolution
         # Try to find a matching existing tab
         existing = _match_tab_by_url(desired, actual_tabs) or _match_tab_by_name(desired, actual_tabs)
 

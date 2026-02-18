@@ -71,7 +71,10 @@ def main() -> None:
 
     # Graceful shutdown on signals
     def _shutdown(signum: int, _frame: object) -> None:
-        sig_name = signal.Signals(signum).name
+        try:
+            sig_name = signal.Signals(signum).name
+        except ValueError:
+            sig_name = str(signum)
         logger.info("signal_received", signal=sig_name)
         controller.stop()
 

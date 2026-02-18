@@ -1,5 +1,7 @@
 """Tests for the tab reconciler."""
 
+from unittest.mock import MagicMock
+
 import pytest
 
 from organizr_tab_controller.models import (
@@ -52,7 +54,8 @@ class TestBuildDesiredTab:
             ingress_backend_service_name="radarr",
             ingress_backend_service_port=7878,
         )
-        tab = build_desired_tab(ref)
+        spec = build_desired_tab(ref)
+        tab = spec.tab
         assert tab.name == "Radarr"
         assert tab.url == "https://radarr.expectedbehaviors.com"
         assert tab.url_local == "http://radarr.media.svc.cluster.local:7878"
@@ -67,7 +70,8 @@ class TestBuildDesiredTab:
             name="radarr",
             ingress_hosts=["radarr.expectedbehaviors.com"],
         )
-        tab = build_desired_tab(ref)
+        spec = build_desired_tab(ref)
+        tab = spec.tab
         assert tab.url == "https://radarr.expectedbehaviors.com"
         assert tab.url_local is None
         assert tab.ping_url is None
@@ -79,7 +83,8 @@ class TestBuildDesiredTab:
             ingress_hosts=["myapp.example.com"],
             ingress_backend_service_name="myapp-svc",
         )
-        tab = build_desired_tab(ref)
+        spec = build_desired_tab(ref)
+        tab = spec.tab
         assert tab.url_local == "http://myapp-svc.media.svc.cluster.local:80"
         assert tab.ping_url == "myapp-svc.media:80"
 
@@ -89,16 +94,16 @@ class TestBuildDesiredTab:
             annotations={f"{ANNOTATION_PREFIX}/name": "Movie Manager"},
             ingress_hosts=["radarr.expectedbehaviors.com"],
         )
-        tab = build_desired_tab(ref)
-        assert tab.name == "Movie Manager"
+        spec = build_desired_tab(ref)
+        assert spec.tab.name == "Movie Manager"
 
     def test_explicit_url_annotation(self) -> None:
         ref = _make_ref(
             name="radarr",
             annotations={f"{ANNOTATION_PREFIX}/url": "https://custom.example.com/radarr"},
         )
-        tab = build_desired_tab(ref)
-        assert tab.url == "https://custom.example.com/radarr"
+        spec = build_desired_tab(ref)
+        assert spec.tab.url == "https://custom.example.com/radarr"
 
     def test_explicit_url_local_annotation(self) -> None:
         """Explicit url-local annotation takes priority over passive derivation."""
@@ -109,8 +114,8 @@ class TestBuildDesiredTab:
             ingress_backend_service_name="radarr",
             ingress_backend_service_port=7878,
         )
-        tab = build_desired_tab(ref)
-        assert tab.url_local == "http://custom-local:9999"
+        spec = build_desired_tab(ref)
+        assert spec.tab.url_local == "http://custom-local:9999"
 
     def test_explicit_image_url(self) -> None:
         ref = _make_ref(
@@ -118,8 +123,8 @@ class TestBuildDesiredTab:
             annotations={f"{ANNOTATION_PREFIX}/image": "https://cdn.example.com/myapp.png"},
             ingress_hosts=["myapp.example.com"],
         )
-        tab = build_desired_tab(ref)
-        assert tab.image == "https://cdn.example.com/myapp.png"
+        spec = build_desired_tab(ref)
+        assert spec.tab.image == "https://cdn.example.com/myapp.png"
 
     def test_explicit_image_known_name(self) -> None:
         ref = _make_ref(
@@ -127,8 +132,8 @@ class TestBuildDesiredTab:
             annotations={f"{ANNOTATION_PREFIX}/image": "plex"},
             ingress_hosts=["myapp.example.com"],
         )
-        tab = build_desired_tab(ref)
-        assert tab.image == "plugins/images/tabs/plex.png"
+        spec = build_desired_tab(ref)
+        assert spec.tab.image == "plugins/images/tabs/plex.png"
 
     def test_type_new_window(self) -> None:
         ref = _make_ref(
@@ -136,8 +141,8 @@ class TestBuildDesiredTab:
             annotations={f"{ANNOTATION_PREFIX}/type": "new-window"},
             ingress_hosts=["external.example.com"],
         )
-        tab = build_desired_tab(ref)
-        assert tab.tab_type == TabType.NEW_WINDOW
+        spec = build_desired_tab(ref)
+        assert spec.tab.tab_type == TabType.NEW_WINDOW
 
     def test_service_derives_local_url_and_ping(self) -> None:
         """Service -> local URL is http internal DNS, ping is service:port."""
@@ -147,7 +152,8 @@ class TestBuildDesiredTab:
             service_cluster_ip="10.96.0.42",
             service_ports=[8989],
         )
-        tab = build_desired_tab(ref)
+        spec = build_desired_tab(ref)
+        tab = spec.tab
         assert tab.url_local == "http://sonarr.media.svc.cluster.local:8989"
         assert tab.ping_url == "sonarr.media:8989"
 
@@ -160,7 +166,8 @@ class TestBuildDesiredTab:
             service_cluster_ip="10.96.0.50",
             service_ports=[80],
         )
-        tab = build_desired_tab(ref)
+        spec = build_desired_tab(ref)
+        tab = spec.tab
         assert tab.url == "https://myapp.expectedbehaviors.com"
         assert tab.url_local == "http://myapp.media.svc.cluster.local:80"
 
@@ -171,7 +178,8 @@ class TestBuildDesiredTab:
             kind="Service",
             service_cluster_ip="10.96.0.99",
         )
-        tab = build_desired_tab(ref)
+        spec = build_desired_tab(ref)
+        tab = spec.tab
         assert tab.url_local == "http://simple.media.svc.cluster.local:80"
         # No ports -> no ping_url
         assert tab.ping_url is None
@@ -183,7 +191,8 @@ class TestBuildDesiredTab:
             kind="Service",
             service_ports=[8080],
         )
-        tab = build_desired_tab(ref)
+        spec = build_desired_tab(ref)
+        tab = spec.tab
         assert tab.url_local == "http://headless.media.svc.cluster.local:8080"
         assert tab.ping_url == "headless.media:8080"
 
@@ -194,7 +203,8 @@ class TestBuildDesiredTab:
             kind="Deployment",
             annotations={"external-dns.alpha.kubernetes.io/hostname": "myapp.expectedbehaviors.com"},
         )
-        tab = build_desired_tab(ref)
+        spec = build_desired_tab(ref)
+        tab = spec.tab
         assert tab.url == "https://myapp.expectedbehaviors.com"
         assert tab.url_local is None  # Deployment has no service info
 
@@ -204,7 +214,8 @@ class TestBuildDesiredTab:
             labels={"app.kubernetes.io/name": "plex"},
             ingress_hosts=["plex.example.com"],
         )
-        tab = build_desired_tab(ref)
+        spec = build_desired_tab(ref)
+        tab = spec.tab
         assert tab.name == "Plex"
         assert tab.image == "plugins/images/tabs/plex.png"
 
@@ -219,24 +230,31 @@ class TestBuildDesiredTab:
             },
             ingress_hosts=["radarr.example.com"],
         )
-        tab = build_desired_tab(ref)
+        spec = build_desired_tab(ref)
+        tab = spec.tab
         assert tab.default is True
         assert tab.splash is True
         assert tab.preload is True
         assert tab.active is False
 
-    def test_group_and_category(self) -> None:
+    def test_group_and_category_names(self) -> None:
         ref = _make_ref(
             name="radarr",
             annotations={
-                f"{ANNOTATION_PREFIX}/group-id": "2",
-                f"{ANNOTATION_PREFIX}/category-id": "5",
+                f"{ANNOTATION_PREFIX}/group": "Media",
+                f"{ANNOTATION_PREFIX}/category": "Media Apps",
+                f"{ANNOTATION_PREFIX}/group-icon": "media.png",
+                f"{ANNOTATION_PREFIX}/category-icon": "https://example.com/cat.png",
             },
             ingress_hosts=["radarr.example.com"],
         )
-        tab = build_desired_tab(ref)
-        assert tab.group_id == 2
-        assert tab.category_id == 5
+        spec = build_desired_tab(ref)
+        assert spec.group_name == "Media"
+        assert spec.category_name == "Media Apps"
+        assert spec.group_icon == "media.png"
+        assert spec.category_icon == "https://example.com/cat.png"
+        assert spec.tab.group_id == 1  # resolved at reconcile time
+        assert spec.tab.category_id is None
 
     def test_fallback_url_from_name_namespace(self) -> None:
         """When no host/hostname info is available, URL falls back to name.namespace."""
@@ -244,8 +262,8 @@ class TestBuildDesiredTab:
             name="obscure",
             kind="Deployment",
         )
-        tab = build_desired_tab(ref)
-        assert tab.url == "https://obscure.media"
+        spec = build_desired_tab(ref)
+        assert spec.tab.url == "https://obscure.media"
 
 
 class TestReconcile:
@@ -370,3 +388,38 @@ class TestReconcile:
         assert len(actions.to_update) == 1
         assert actions.to_update[0].url == "https://new-radarr.example.com"
         assert actions.to_update[0].id == 1
+
+    def test_reconcile_with_client_resolves_group_and_category(self) -> None:
+        """With organizr_client, category is ensured, group icon set, and IDs resolved."""
+        refs = [
+            _make_ref(
+                name="radarr",
+                annotations={
+                    f"{ANNOTATION_PREFIX}/group": "Media",
+                    f"{ANNOTATION_PREFIX}/category": "Media Apps",
+                    f"{ANNOTATION_PREFIX}/group-icon": "media.png",
+                    f"{ANNOTATION_PREFIX}/category-icon": "https://example.com/cat.png",
+                },
+                ingress_hosts=["radarr.example.com"],
+            )
+        ]
+        mock_client = MagicMock()
+        mock_client.ensure_category_by_name.return_value = 5
+        mock_client.resolve_group_id_by_name.return_value = 2
+        mock_client.list_tabs.return_value = []
+
+        actions = reconcile(
+            refs,
+            actual_tabs=[],
+            sync_policy=SyncPolicy.UPSERT,
+            organizr_client=mock_client,
+        )
+
+        mock_client.ensure_category_by_name.assert_called_once_with(
+            "Media Apps", "https://example.com/cat.png"
+        )
+        mock_client.ensure_group_icon_by_name.assert_called_once_with("Media", "media.png")
+        mock_client.resolve_group_id_by_name.assert_called_with("Media")
+        assert len(actions.to_create) == 1
+        assert actions.to_create[0].group_id == 2
+        assert actions.to_create[0].category_id == 5
