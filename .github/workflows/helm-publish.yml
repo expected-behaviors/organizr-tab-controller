@@ -40,7 +40,7 @@ jobs:
           elif [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.release_tag }}" ]; then
             TAG="${{ inputs.release_tag }}"
           else
-            TAG=$(gh release list --limit 1 --repo ${{ github.repository }} --json tagName -q '.[0].tagName')
+            TAG=$(gh api "repos/${{ github.repository }}/releases?per_page=1" | jq -r '.[0].tag_name')
           fi
           VERSION="${TAG#v}"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
@@ -57,6 +57,7 @@ jobs:
 
       - name: Prepare chart for release (image tag = chart version)
         run: |
+          mkdir -p build
           cp -r helm build/chart
           cd build/chart
           # Released chart tarball defaults to image tag = chart version (Sonarr-style)
