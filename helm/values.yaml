@@ -41,7 +41,7 @@ organizr-tab-controller:
         main:
           image:
             # Align with Docker workflow (publishes to Docker Hub). Override if using GHCR or different registry.
-            repository: docker.io/jd4883/organizr-tab-controller
+            repository: docker.io/expectedbehaviors/organizr-tab-controller
             # Default for dev (Git installs). Released chart tarballs get tag = chart version in CI.
             tag: latest
             pullPolicy: IfNotPresent

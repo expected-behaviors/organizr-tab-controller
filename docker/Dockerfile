@@ -22,7 +22,7 @@ FROM ${BASE}
 
 LABEL maintainer="Jacob Dresdale"
 LABEL description="Kubernetes controller that manages Organizr tabs via annotations"
-LABEL org.opencontainers.image.source="https://github.com/jd4883/organizr-tab-controller"
+LABEL org.opencontainers.image.source="https://github.com/expectedbehaviors/organizr-tab-controller"
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1

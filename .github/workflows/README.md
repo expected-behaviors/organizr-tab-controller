@@ -80,7 +80,7 @@ No manual tagging or release creation needed for the standard flow.
 
 ## Helm chart publishing
 
-- On **release published**, the **Helm chart publish** workflow sets chart **version** and **appVersion** from the release tag, sets the default **image tag** in the packaged chart to that version (e.g. `docker.io/jd4883/organizr-tab-controller:0.1.1`), and uploads `organizr-tab-controller-<version>.tgz` to the GitHub Release.
+- On **release published**, the **Helm chart publish** workflow sets chart **version** and **appVersion** from the release tag, sets the default **image tag** in the packaged chart to that version (e.g. `docker.io/expectedbehaviors/organizr-tab-controller:0.1.1`), and uploads `organizr-tab-controller-<version>.tgz` to the GitHub Release.
 - **From Git (Argo CD / Helm):** use repo URL and path `helm/` (see [helm/README.md](../../helm/README.md)); image tag will be `latest` unless overridden.
 - **Artifact Hub:** add this GitHub repo as a Helm repository and point it at **GitHub Releases** so the chart and versions appear there.
 

@@ -221,10 +221,10 @@ spec:
       serviceAccountName: organizr-tab-controller
       containers:
         - name: controller
-          image: ghcr.io/jd4883/organizr-tab-controller:latest
+          image: docker.io/expectedbehaviors/organizr-tab-controller:latest
           env:
             - name: ORGANIZR_API_URL
-              value: "https://organizr-tab-controller.io"
+              value: "https://organizr.example.com"  # Your Organizr base URL
             - name: ORGANIZR_API_KEY_FILE
               value: "/var/run/secrets/organizr/api-key"
             - name: ORGANIZR_SYNC_POLICY
@@ -238,10 +238,10 @@ spec:
           resources:
             requests:
               cpu: 50m
-              memory: 64Mi
-            limits:
-              cpu: 200m
               memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
           securityContext:
             runAsNonRoot: true
             readOnlyRootFilesystem: true
@@ -322,7 +322,7 @@ From the repo root:
 
 ```bash
 # Clone and install
-git clone git@github.com:jd4883/organizr-tab-controller.git
+git clone git@github.com:expectedbehaviors/organizr-tab-controller.git
 cd organizr-tab-controller
 python -m venv .venv
 source .venv/bin/activate
@@ -360,6 +360,12 @@ K8s Resources (annotated)
 ```
 
 The controller is fully stateless — all state is derived from Kubernetes resources and the Organizr API on each reconciliation cycle.
+
+## Support this project
+
+I build tools to get the best homelab experience I can from what’s available and to grow as a programmer along the way. If you’d like to contribute, donations go toward homelab operating costs and subscriptions that keep this tooling maintained. Optional and appreciated.
+
+[![Donate with PayPal](https://www.paypalobjects.com/en_US/i/btn/btn_donate_LG.gif)](https://www.paypal.com/donate/?business=9RHVW92WMWQNL&no_recurring=0&item_name=Optional+donations+help+support+Expected+Behaviors%E2%80%99+open+source+work.+Thank+you.&currency_code=USD)
 
 ## License
 

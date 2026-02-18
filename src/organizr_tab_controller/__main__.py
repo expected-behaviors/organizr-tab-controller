@@ -12,6 +12,15 @@ import sys
 import structlog
 
 
+def _get_version() -> str:
+    """Package version from metadata, or fallback when not installed."""
+    try:
+        from importlib.metadata import version
+        return version("organizr-tab-controller")
+    except Exception:
+        return "0.1.0"
+
+
 def _configure_logging(log_level: str, log_format: str) -> None:
     """Set up structlog with the chosen format and level."""
     import logging
@@ -62,7 +71,7 @@ def main() -> None:
     logger = structlog.get_logger("main")
     logger.info(
         "organizr_tab_controller_starting",
-        version="0.1.0",
+        version=_get_version(),
         api_url=settings.api_url,
         sync_policy=settings.sync_policy.value,
     )

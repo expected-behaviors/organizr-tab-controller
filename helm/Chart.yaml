@@ -11,7 +11,8 @@ keywords:
   - controller
   - bjw-s
   - app-template
-maintainers: []
+maintainers:
+  - name: Expected Behaviors
 dependencies:
   - name: app-template
     version: "4.6.2"

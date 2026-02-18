@@ -120,7 +120,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/jd4883/organizr-tab-controller.git
+    repoURL: https://github.com/expectedbehaviors/organizr-tab-controller.git
     targetRevision: main
     path: helm
     helm:
@@ -164,7 +164,7 @@ Use this when you consume the chart from a Helm repo (e.g. one built from GitHub
 **1. Add the Helm repo** (if your releases are published as a repo, e.g. GitHub Pages):
 
 ```bash
-helm repo add organizr-tab-controller https://jd4883.github.io/organizr-tab-controller/
+helm repo add organizr-tab-controller https://expectedbehaviors.github.io/organizr-tab-controller/
 helm repo update
 ```
 
@@ -181,7 +181,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://jd4883.github.io/organizr-tab-controller/
+    repoURL: https://expectedbehaviors.github.io/organizr-tab-controller/
     chart: organizr-tab-controller
     targetRevision: "0.1.0"
     helm:
