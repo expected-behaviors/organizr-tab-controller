@@ -1,0 +1,61 @@
+# Package the Helm chart with version-matched image tag and attach to GitHub Release.
+# Released chart tarballs default to image tag = chart version (Sonarr-style).
+
+name: Helm chart publish
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  package-and-upload:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'v3.14.0'
+
+      - name: Set version from release tag
+        id: version
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/}"
+          VERSION="${VERSION#v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      - name: Install yq
+        run: sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 && sudo chmod +x /usr/local/bin/yq
+
+      - name: Prepare chart for release (image tag = chart version)
+        run: |
+          cp -r helm build/chart
+          cd build/chart
+          # Released chart tarball defaults to image tag = chart version (Sonarr-style)
+          yq e '."organizr-tab-controller".controllers.main.containers.main.image.tag = strenv(VERSION)' -i values.yaml
+          cd ../..
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+
+      - name: Add dependency and package
+        run: |
+          helm repo add bjw-s https://bjw-s-labs.github.io/helm-charts
+          helm dependency update build/chart
+          VERSION="${{ steps.version.outputs.version }}"
+          helm package build/chart --version "$VERSION" --app-version "$VERSION"
+          echo "chart_tarball=organizr-tab-controller-${VERSION}.tgz" >> $GITHUB_ENV
+
+      - name: Upload chart to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ github.event.release.tag_name }}" ${{ env.chart_tarball }} --clobber
