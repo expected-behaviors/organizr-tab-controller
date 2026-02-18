@@ -2,6 +2,19 @@
 
 A Kubernetes controller that automatically manages [Organizr](https://organizr.app) tabs by watching annotated Kubernetes resources. Inspired by the patterns used by [external-dns](https://github.com/kubernetes-sigs/external-dns) and [Reloader](https://github.com/stakater/Reloader).
 
+## About Organizr
+
+[Organizr](https://organizr.app) is a homelab dashboard that aggregates your services (Plex, Radarr, Sonarr, etc.) into a single UI with tabs, auth, and health checks. This controller talks to Organizr’s API to create and update those tabs from Kubernetes annotations.
+
+- **Documentation:** [docs.organizr.app](https://docs.organizr.app/) — installation, features, and configuration.
+- **API reference:** [demo.organizr.app/docs](https://demo.organizr.app/docs/) — interactive API docs (RapiDoc) for the endpoints this controller uses (tabs, categories, groups).
+- **Running Organizr:** There is no single “official” Helm chart; common options are:
+  - **Docker (official):** [organizr/organizr](https://hub.docker.com/r/organizr/organizr) on Docker Hub (also `ghcr.io/organizr/organizr`).
+  - **LinuxServer.io:** [linuxserver/organizr](https://hub.docker.com/r/linuxserver/organizr) — note [LinuxServer has deprecated this image](https://docs.linuxserver.io/deprecated_images/docker-organizr/); consider the official image or Hotio for new installs.
+  - **Hotio:** [hotio.dev/containers](https://hotio.dev/containers/) — community images for many homelab apps; check for Organizr or use the official image.
+
+You need a running Organizr instance and an API key (from Organizr’s Settings → API Keys) to use this controller.
+
 ## Project layout
 
 | Path | Purpose |
@@ -9,7 +22,7 @@ A Kubernetes controller that automatically manages [Organizr](https://organizr.a
 | **Root** | Tool source code (`src/`, `tests/`), and this README (overview, annotations, config, development). |
 | **[docker/](docker/)** | Container image build (hardened Chainguard Python base, non-root). Build from repo root. |
 | **[helm/](helm/)** | Kubernetes deployment chart. [BJW-S app-template](https://bjw-s-labs.github.io/helm-charts/docs/app-template/) wrapper with HPA, no ingress, RBAC; only what the controller needs. |
-| **[docs/](docs/)** | [CI-CD.md](docs/CI-CD.md) – GitHub Actions (Docker Hub, Helm, release notes), required secrets, and Artifact Hub. |
+| **[.github/workflows/](.github/workflows/)** | GitHub Actions workflows and [CI/CD documentation](.github/workflows/README.md) (credentials, triggers, release flow). |
 
 ## Overview
 
@@ -109,7 +122,9 @@ All settings are configured via environment variables with the `ORGANIZR_` prefi
 | `ORGANIZR_RECONCILE_INTERVAL` | No | `60` | Seconds between full reconciliation |
 | `ORGANIZR_WATCH_NAMESPACES` | No | (all) | Comma-separated list of namespaces to watch |
 | `ORGANIZR_WATCH_RESOURCE_TYPES` | No | `ingresses,services,deployments,statefulsets,daemonsets` | Resource types to watch |
-| `ORGANIZR_ENABLE_LEADER_ELECTION` | No | `false` | Enable for HA (multiple replicas) |
+| `ORGANIZR_ENABLE_LEADER_ELECTION` | No | `false` | Enable for HA (multiple replicas); reserved for future use |
+| `ORGANIZR_LEADER_ELECTION_NAMESPACE` | No | `default` | Namespace for the leader-election Lease |
+| `ORGANIZR_LEADER_ELECTION_NAME` | No | `organizr-tab-controller-leader` | Name of the leader-election Lease object |
 | `ORGANIZR_LOG_LEVEL` | No | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
 | `ORGANIZR_LOG_FORMAT` | No | `json` | `json` or `console` |
 

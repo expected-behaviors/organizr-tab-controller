@@ -7,7 +7,7 @@ Kubernetes deployment for **organizr-tab-controller**. Security-hardened default
 - **Deployment** – single controller container (image, env, resources, API key from Secret).
 - **Service** – for pod selector/labels (controller does not serve HTTP).
 - **RBAC** – ServiceAccount, ClusterRole, ClusterRoleBinding (watch Ingresses, Services, Deployments, StatefulSets, DaemonSets, Leases).
-- **HPA** – optional horizontal pod autoscaling (default: min 1, max 3).
+- **HPA** – optional horizontal pod autoscaling (default: **off**; set `hpa.enabled: true` for min 1, max 3).
 - **No ingress, no persistence** – controller is cluster-internal and stateless.
 
 ## Requirements
@@ -15,6 +15,31 @@ Kubernetes deployment for **organizr-tab-controller**. Security-hardened default
 - Kubernetes 1.28+
 - **Organizr API URL** – set via values or `--set`.
 - **Organizr API key** – in a Secret named `organizr-api-key` in the release namespace, with key `api-key` (or override env to use a different secret/key).
+
+---
+
+## Environment variables
+
+The controller reads all settings from environment variables with the `ORGANIZR_` prefix. The chart sets a minimal set by default; override any via `organizr-tab-controller.controllers.main.containers.main.env` in values or `--set`.
+
+| Variable | Required | Default (app) | Description |
+|----------|----------|----------------|-------------|
+| `ORGANIZR_API_URL` | **Yes** | — | Organizr base URL (e.g. `https://organizr.example.com`). Set on install. |
+| `ORGANIZR_API_KEY` | Yes* | — | API key. Chart default: from Secret `organizr-api-key`, key `api-key`. |
+| `ORGANIZR_API_KEY_FILE` | No | `/var/run/secrets/organizr/api-key` | Path to file containing API key (e.g. Secret mount). |
+| `ORGANIZR_API_VERSION` | No | `v2` | Organizr API version: `v2` or `v1`. |
+| `ORGANIZR_API_TIMEOUT` | No | `30` | HTTP timeout in seconds for API calls. |
+| `ORGANIZR_SYNC_POLICY` | No | `upsert` | `upsert` (create/update only) or `sync` (create/update/delete). |
+| `ORGANIZR_RECONCILE_INTERVAL` | No | `60` | Seconds between full reconciliation sweeps. |
+| `ORGANIZR_WATCH_NAMESPACES` | No | (all) | Comma-separated namespaces to watch; empty = all. |
+| `ORGANIZR_WATCH_RESOURCE_TYPES` | No | `ingresses,services,deployments,statefulsets,daemonsets` | Resource types to watch for annotations. |
+| `ORGANIZR_ENABLE_LEADER_ELECTION` | No | `false` | Enable for HA (multiple replicas); reserved for future use. |
+| `ORGANIZR_LEADER_ELECTION_NAMESPACE` | No | `default` | Namespace for leader-election Lease. |
+| `ORGANIZR_LEADER_ELECTION_NAME` | No | `organizr-tab-controller-leader` | Name of the leader-election Lease. |
+| `ORGANIZR_LOG_LEVEL` | No | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR`. |
+| `ORGANIZR_LOG_FORMAT` | No | `json` | `json` or `console`. |
+
+*Either `ORGANIZR_API_KEY` (or the Secret referenced by the chart) or a valid file at `ORGANIZR_API_KEY_FILE` is required.
 
 ---
 
@@ -165,7 +190,7 @@ spec:
         rbac:
           create: true
         hpa:
-          enabled: true
+          enabled: false
         organizr-tab-controller:
           global:
             fullnameOverride: organizr-tab-controller
@@ -197,7 +222,7 @@ Replace `repoURL` and `targetRevision` with your actual Helm repo URL and chart 
 ## Chart layout
 
 - **Chart.yaml** – bjw-s app-template dependency (alias `organizr-tab-controller`).
-- **values.yaml** – security defaults, single controller, no ingress/persistence, HPA, RBAC.
+- **values.yaml** – security defaults, single controller, no ingress/persistence, HPA off by default, RBAC.
 - **templates/** – ServiceAccount, ClusterRole, ClusterRoleBinding (when `rbac.create`), HPA (when `hpa.enabled`).
 
 Full tool docs and annotations: [root README](../README.md).

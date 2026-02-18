@@ -1,5 +1,5 @@
 # Auto-release on merge to main: bump patch version, create tag and release.
-# Triggers Docker build, Helm publish, and release notes (see docs/CI-CD.md).
+# Triggers Docker build, Helm publish, and release notes (see .github/workflows/README.md).
 # Requires: default branch is main; tags exist as v* (e.g. v0.1.0).
 
 name: Release on merge to main

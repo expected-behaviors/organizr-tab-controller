@@ -1,6 +1,6 @@
 # Build and publish image to Docker Hub.
 # Runs only when docker/ or image inputs (src, pyproject.toml, README.md) change, or on release.
-# Required secrets: DOCKERHUB_USERNAME, DOCKERHUB_TOKEN. See docs/CI-CD.md.
+# Required secrets: DOCKERHUB_USERNAME, DOCKERHUB_TOKEN. See .github/workflows/README.md.
 
 name: Docker build and publish
 
