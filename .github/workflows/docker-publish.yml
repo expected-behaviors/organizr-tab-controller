@@ -22,6 +22,7 @@ on:
 
 env:
   DOCKER_IMAGE: organizr-tab-controller
+  DOCKER_REPO_PREFIX: expectedbehaviors
 
 jobs:
   build-and-push:
@@ -61,7 +62,7 @@ jobs:
           file: ./docker/Dockerfile
           push: true
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.DOCKER_IMAGE }}:${{ steps.version.outputs.tag }}
-            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.DOCKER_IMAGE }}:latest
+            ${{ env.DOCKER_REPO_PREFIX }}/${{ env.DOCKER_IMAGE }}:${{ steps.version.outputs.tag }}
+            ${{ env.DOCKER_REPO_PREFIX }}/${{ env.DOCKER_IMAGE }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max

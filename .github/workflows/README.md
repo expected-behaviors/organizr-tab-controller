@@ -46,7 +46,7 @@ Add these under **Settings → Secrets and variables → Actions** in the repo.
 4. Generate and **copy the token once** (it won’t be shown again).
 5. In your GitHub repo: **Settings → Secrets and variables → Actions** → **New repository secret** → Name: `DOCKERHUB_TOKEN`, Value: paste the token. Also add `DOCKERHUB_USERNAME` with your Docker Hub username.
 
-Image is pushed as `$DOCKERHUB_USERNAME/organizr-tab-controller:<tag>`.
+Image is pushed as `DOCKER_REPO_PREFIX/DOCKER_IMAGE:<tag>`. Set `DOCKER_REPO_PREFIX` (and optionally `DOCKER_IMAGE`) in the workflow `env` in `docker-publish.yml` to match your Docker Hub namespace and image name.
 
 ### OpenAI API key (required for release notes)
 
