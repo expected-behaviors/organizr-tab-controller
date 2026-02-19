@@ -3,7 +3,7 @@ entries:
   organizr-tab-controller:
   - apiVersion: v2
     appVersion: 0.0.1
-    created: "2026-02-19T00:58:29.708348153Z"
+    created: "2026-02-19T16:02:27.434240192Z"
     dependencies:
     - alias: organizr-tab-controller
       name: app-template
@@ -11,7 +11,7 @@ entries:
       version: 4.6.2
     description: Kubernetes controller that manages Organizr tabs from annotated resources.
       Wrapper around bjw-s app-template; no ingress, HPA supported.
-    digest: 79a0b1e2f8defede581ce83f0bcced748100b70af8a588a4dedb427ef64d5f79
+    digest: 5c96723c80561a7dd18501dc10abac8e5a5ae468c3e9b0302a40198e91e2a8e9
     keywords:
     - organizr
     - kubernetes
@@ -26,4 +26,4 @@ entries:
     urls:
     - https://expectedbehaviors.github.io/organizr-tab-controller/organizr-tab-controller-0.0.1.tgz
     version: 0.0.1
-generated: "2026-02-19T00:58:29.702161732Z"
+generated: "2026-02-19T16:02:27.427724207Z"
