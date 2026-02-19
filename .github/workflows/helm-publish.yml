@@ -31,6 +31,7 @@ jobs:
           fetch-depth: 0
 
       - name: Package and upload Helm chart
+        id: helm-publish
         uses: expectedbehaviors/github-actions/.github/actions/helm-publish@main
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
